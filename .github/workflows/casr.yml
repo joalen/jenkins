@@ -27,14 +27,35 @@ jobs:
     - name: Build project with JDK 17
       run: mvn clean install -DskipTests
 
-    - name: Setup CASR
+    - name: Install timeout command (macOS)
+      if: runner.os == 'macOS'
+      run: brew install coreutils
+      
+    - name: Install Rust
       run: |
-        curl -L -o casr-x86_64-unknown-linux-gnu.tar.xz https://github.com/ispras/casr/releases/latest/download/casr-x86_64-unknown-linux-gnu.tar.xz
-        tar -xvf casr-x86_64-unknown-linux-gnu.tar.xz
-        mv casr-x86_64-unknown-linux-gnu /tmp/casr
-        chmod +x /tmp/casr/casr-java
-        echo "/tmp/casr" >> $GITHUB_PATH
+        curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+        source $HOME/.cargo/env
+    
+    - name: Install CASR using Cargo
+      run: cargo install casr
 
+    - name: Run CASR on the .JAR file(s) (macOS)
+      if: runner.os == 'macOS'
+      continue-on-error: true
+      run: |  
+        mkdir -p casr_reports
+        set +e
+        #!/bin/bash
+        directory=$(pwd)
+        
+        jar_files=$(find "$directory" -type f -name "*.jar")
+        for jar_file in $jar_files; 
+        do
+            sanitized_main_class=$(sanitize_filename "$main_class")
+            command="gtimeout 2m java -jar $runjpf_jar +classpath=$jar_file $main_class" 
+            $command > "./casr_reports/${sanitized_main_class}_casr_report.txt"
+        done
+        
     - name: Run CASR on the .JAR file(s) (Linux)
       if: runner.os == 'Linux'
       continue-on-error: true
